@@ -379,6 +379,16 @@ def run_checks(checks: list[str], schemas: dict, *, create_status: int,
             if total != completion:
                 return "fail", f"total_tokens({total}) != completion_tokens({completion})", completion, total
 
+        elif check == "succeeded_has_last_frame":
+            # 开启 return_last_frame:true 后，成功态响应应在 content.last_frame_url 返回尾帧图 URL。
+            # 是否返回取决于被测实现是否透传该参数：若成功响应仅含 video_url 而缺 last_frame_url，
+            # 该 check 失败，用于暴露不支持 return_last_frame 透传的实现。
+            last_frame = get_path(query_resp, "content.last_frame_url")
+            if not last_frame:
+                return ("fail",
+                        "成功响应缺 content.last_frame_url（被测实现未透传 return_last_frame 或丢弃了尾帧字段）",
+                        "content.last_frame_url", last_frame)
+
         else:
             return "fail", f"未知 check：{check}", None, None
 

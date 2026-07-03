@@ -41,6 +41,7 @@ schema 表达不了的跨字段 / 流程语义，保留为少量命名 check：
 | `reached_succeeded` | 轮询终态为 `succeeded`（非成功态 fail 并附 `error`） |
 | `succeeded_schema` | 终态响应额外满足成功态约束（必有 `content.video_url` 与 `usage`） |
 | `usage_total_equals_completion` | `usage.total_tokens == usage.completion_tokens` |
+| `succeeded_has_last_frame` | 开启 `return_last_frame:true` 后，成功响应含 `content.last_frame_url`（尾帧图 URL） |
 | `create_error_status` | 创建任务返回 4xx（负向用例） |
 | `error_schema` | 错误响应通过 `error_response.schema.json` |
 
@@ -56,6 +57,8 @@ schema 表达不了的跨字段 / 流程语义，保留为少量命名 check：
 | `image_to_video` | `[text, image_url(first_frame)]` | 1 图 URL |
 | `start_end_to_video` | `[text, image_url(first_frame), image_url(last_frame)]` | 2 图 URL |
 | `multimodal_reference` | `[text, reference_image, reference_video, reference_audio]` | 多素材 URL |
+
+外加一个尾帧透传用例：文生视频开启 `return_last_frame: true`，校验成功响应在 `content.last_frame_url` 返回尾帧图（用于识别不透传该参数的实现）。
 
 外加一个负向用例：用不存在的模型 ID 触发错误响应，校验错误格式兼容性。
 
