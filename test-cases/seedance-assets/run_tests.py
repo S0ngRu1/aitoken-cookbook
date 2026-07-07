@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -129,6 +130,24 @@ def load_config_and_steps() -> tuple[dict, list[dict]]:
         "liveness_poll_timeout": int(data.get("liveness_poll_timeout", 120)),
     }
     return config, data.get("steps", [])
+
+
+# 匹配请求体里的 ${var} 占位符（var 为字母/数字/下划线）
+_PLACEHOLDER_RE = re.compile(r"\$\{(\w+)\}")
+
+
+def collect_placeholders(value) -> set[str]:
+    """递归收集 value 中出现的所有 ${var} 变量名，返回名字集合。"""
+    names: set[str] = set()
+    if isinstance(value, str):
+        names.update(_PLACEHOLDER_RE.findall(value))
+    elif isinstance(value, list):
+        for v in value:
+            names.update(collect_placeholders(v))
+    elif isinstance(value, dict):
+        for v in value.values():
+            names.update(collect_placeholders(v))
+    return names
 
 
 def substitute(value, variables: dict):
@@ -777,34 +796,33 @@ def main() -> int:
             return 1
 
     # 串行执行：素材资产是有依赖的生命周期链，后续 step 依赖前序输出。
-    # 任一前置 step 失败时，依赖它的后续 step 仍执行但占位符可能未解析——
-    # 为避免污染，前置生命周期 step 失败则跳过其依赖项（负向用例与真人会话独立，不跳过）。
+    # 一个 step 是否可执行只取决于它实际引用的 ${var} 占位符是否可解析：
+    # 变量要么来自 config（如 ${project_name}），要么由前序 step 成功 capture
+    # （如 ${group_id} / ${asset_id}）。只有当引用的变量缺失时才跳过该 step，
+    # 而不是用粗粒度的「断链」标志牵连无关 step——例如 list_assets 失败不产出
+    # 任何变量，delete_asset（只依赖 ${asset_id}）与 delete_asset_group（只依赖
+    # ${group_id}）不应因此被跳过，否则本次创建的资源无法清理。
     variables: dict = {}
     results: list[CaseResult] = []
-    # 依赖前序产物的 step（需要 group_id / asset_id）。
-    # create_liveness_session 与 invalid_get_asset_error 独立，不在此列。
-    depends_on_chain = {
-        "create_asset", "wait_asset_active", "list_assets", "list_asset_groups",
-        "update_asset", "update_asset_group", "delete_asset", "delete_asset_group",
-    }
-    chain_broken = False
 
     for step in steps:
-        if not args.dry_run and chain_broken and step["id"] in depends_on_chain:
-            results.append(CaseResult(
-                id=step["id"], name=step.get("name", step["id"]), status="error",
-                error="前置生命周期 step 失败，跳过该依赖 step",
-                details={"action": step.get("action"), "skipped": True},
-            ))
-            continue
+        # 解析该 step body 引用的占位符，找出尚未就绪（config 与 variables 均无）的变量
+        if not args.dry_run:
+            referenced = collect_placeholders(step.get("body", {}))
+            missing = sorted(v for v in referenced if v not in config and v not in variables)
+            if missing:
+                results.append(CaseResult(
+                    id=step["id"], name=step.get("name", step["id"]), status="error",
+                    error=f"依赖变量未就绪（前置 step 未产出）：{', '.join(missing)}，跳过该 step",
+                    details={"action": step.get("action"), "skipped": True,
+                             "missing_vars": missing},
+                ))
+                continue
 
-        result, ok = run_step(step, schemas=schemas, config=config, variables=variables,
-                              base_url=base_url, access_key=access_key, secret_key=secret_key,
-                              dry_run=args.dry_run)
+        result, _ = run_step(step, schemas=schemas, config=config, variables=variables,
+                             base_url=base_url, access_key=access_key, secret_key=secret_key,
+                             dry_run=args.dry_run)
         results.append(result)
-        # 生命周期链上的 step 失败 → 标记断链
-        if not ok and step["id"] in (depends_on_chain | {"create_group"}):
-            chain_broken = True
 
     # 真人素材测试链（仅 --real-person）：交互式，跑在常规链之后。
     if args.real_person:
