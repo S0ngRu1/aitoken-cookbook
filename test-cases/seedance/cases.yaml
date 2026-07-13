@@ -24,11 +24,13 @@
 #   create_error_status             创建任务返回 4xx（负向用例）
 #   error_schema                    错误响应通过 error_response.schema.json（{error:{code,message,...}}）
 #   error_code_matches              error.code 精确等于 case 声明的 expected_error_code（负向用例）
+#   status_queued_or_running        首次查询 status 为 queued 或 running（进行中态）
 #
 # 单个 case 可用字段覆盖全局：model / prompt / resolution / ratio / duration /
 # first_frame_url / last_frame_url / reference_*_url，以及可选开关
 # seed / camera_fixed / watermark / generate_audio / return_last_frame；
 # 负向用例可声明 expected_error_code 供 error_code_matches 校验。
+# poll: once  仅创建后查询一次，不轮询到终态（与全局 --no-poll 等效，但只作用于该 case）。
 
 # ---------- 全局配置 ----------
 
@@ -59,6 +61,17 @@ cases:
     name: 文生视频 基础连通性（创建 + 查询结构）
     scenario: text_to_video
     checks: [create_status_200, create_schema, query_status_200, query_schema]
+
+  - id: t2v_immediate_query
+    name: 文生视频 创建后立即查询（queued 态响应结构）
+    scenario: text_to_video
+    poll: once
+    checks:
+      - create_status_200
+      - create_schema
+      - query_status_200
+      - query_schema
+      - status_queued_or_running
 
   - id: t2v_full
     name: 文生视频 全流程（轮询到成功 + 计费字段）

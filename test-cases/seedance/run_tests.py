@@ -335,8 +335,15 @@ def run_checks(checks: list[str], schemas: dict, *, create_status: int,
     expected/actual 反映任务最终状态，便于报告直观展示。
     """
     task_status = query_resp.get("status") if isinstance(query_resp, dict) else None
-    expected_display = "succeeded" if "reached_succeeded" in checks else None
-    actual_display = task_status if "reached_succeeded" in checks else None
+    if "status_queued_or_running" in checks:
+        expected_display = "queued|running"
+        actual_display = task_status
+    elif "reached_succeeded" in checks:
+        expected_display = "succeeded"
+        actual_display = task_status
+    else:
+        expected_display = None
+        actual_display = None
 
     for check in checks:
         if check == "create_status_200":
@@ -376,6 +383,15 @@ def run_checks(checks: list[str], schemas: dict, *, create_status: int,
             err = validate_schema(schemas["query"], query_resp)
             if err:
                 return "fail", f"查询响应不符合 schema：{err}", None, None
+
+        elif check == "status_queued_or_running":
+            if task_status not in {"queued", "running"}:
+                return (
+                    "fail",
+                    f"首次查询 status 期望 queued 或 running，实际 {task_status}",
+                    "queued|running",
+                    task_status,
+                )
 
         elif check == "reached_succeeded":
             if not polled:
@@ -425,8 +441,11 @@ def run_case(case: dict, *, schemas: dict, config: dict, model: str, base_url: s
     scenario = case.get("scenario", "text_to_video")
     checks = case.get("checks", [])
     case_model = case.get("model", model)
+    case_no_poll = no_poll or case.get("poll") == "once"
 
     base_details = {"scenario": scenario, "model": case_model}
+    if case.get("poll"):
+        base_details["poll"] = case["poll"]
 
     # 构造创建请求体
     try:
@@ -480,9 +499,9 @@ def run_case(case: dict, *, schemas: dict, config: dict, model: str, base_url: s
                 base_url, api_key, task_id,
                 interval=config["poll_interval"],
                 timeout_total=config["poll_timeout"],
-                no_poll=no_poll,
+                no_poll=case_no_poll,
             )
-            polled = not no_poll
+            polled = not case_no_poll
         except Exception as exc:  # noqa: BLE001
             elapsed = int((time.monotonic() - start) * 1000)
             return CaseResult(
