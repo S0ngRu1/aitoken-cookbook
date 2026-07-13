@@ -45,6 +45,7 @@ schema 表达不了的跨字段 / 流程语义，保留为少量命名 check：
 | `create_error_status` | 创建任务返回 4xx（负向用例） |
 | `error_schema` | 错误响应通过 `error_response.schema.json` |
 | `error_code_matches` | `error.code` 精确等于 case 声明的 `expected_error_code`（负向用例） |
+| `status_queued_or_running` | 首次查询 `status` 为 `queued` 或 `running`（进行中态） |
 
 计费字段（`usage`）不写死数值，仅由 schema 约束类型与 `minimum: 1`。
 
@@ -68,6 +69,11 @@ schema 表达不了的跨字段 / 流程语义，保留为少量命名 check：
 
 > `prompt` / `first_frame_url` / `last_frame_url` 等素材字段支持在单个 case 中覆盖全局配置，
 > 负向用例可声明 `expected_error_code` 供 `error_code_matches` 校验精确错误码。
+
+另有一个「创建后立即查询」用例（`t2v_immediate_query`）：创建任务后只查询一次，
+校验 queued/running 态响应结构是否符合火山格式（`poll: once`，无需等待视频生成完成）。
+
+单个 case 可通过 `poll: once` 声明仅查询一次（不轮询到终态），与全局 `--no-poll` 等效但只作用于该 case。
 
 ### 输入素材
 
@@ -118,6 +124,8 @@ python run_tests.py --model your-model-name
 ```bash
 python run_tests.py --no-poll
 ```
+
+也可在单个 case 上声明 `poll: once`（见 `t2v_immediate_query`），与其它需轮询到终态的 case 混跑。
 
 不打真实接口、仅自测「请求体构造与 schema 加载」（无需配置地址和密钥）：
 
