@@ -23,7 +23,8 @@ test-cases/
 │   └── reports/             # 运行结果输出目录（git 忽略）
 ├── seedance/                # Seedance 视频生成火山兼容格式测试（创建→轮询→查询）
 │   ├── README.md            # 该模型的测试说明
-│   ├── cases.yaml           # 用例定义（4 场景 + 负向用例）
+│   ├── cases.yaml           # 用例定义（按模型 profile 选择能力场景）
+│   ├── profiles.yaml        # Seedance 2.5 / 2.0 / Fast / Mini 能力档案
 │   ├── run_tests.py         # 执行入口（异步：创建任务 + 轮询查询）
 │   ├── schemas/             # 火山格式响应体 JSON Schema（结构契约）
 │   └── reports/             # 运行结果输出目录（git 忽略）
@@ -80,6 +81,15 @@ cd test-cases/<model-name>
 python run_tests.py
 ```
 
+Seedance 需要额外声明模型能力档案；实际模型标识可为 Model ID、Endpoint ID 或自定义别名：
+
+```bash
+cd test-cases/seedance
+python run_tests.py --model ep-custom-seedance-prod --profile seedance-2.5
+```
+
+具体 profile 取值与使用方式见 [Seedance 测试说明](seedance/README.md#运行)。
+
 运行完成后，结果会输出到 `reports/` 目录，每次运行同时产出三种格式（见下文）。
 
 ## 结果格式
@@ -100,12 +110,12 @@ JSON 顶层固定为 `model` / `summary` / `cases`；每个 case 的固定字段
 |------|------|
 | `id` | 用例唯一标识 |
 | `name` | 可读名称 |
-| `status` | `pass` / `fail` / `error` |
+| `status` | `pass` / `fail` / `error` / `skipped`；`skipped` 为中性结果，不影响整体通过 |
 | `expected` | 期望值 |
 | `actual` | 实际值 |
 | `error` | 执行报错信息（仅 error 状态） |
 | `duration_ms` | 耗时（毫秒） |
-| `details` | 模型自定义数据（请求参数、媒体 URL、原始响应片段等） |
+| `details` | 模型自定义数据（请求参数、媒体 URL、原始响应片段等）；跳过用例在 `skip_reason` 记录原因 |
 
 模型的 `run_tests.py` 只需收集 `CaseResult` 列表，构造 `Report` 后调用 `report.write(out_dir)` 即可：
 

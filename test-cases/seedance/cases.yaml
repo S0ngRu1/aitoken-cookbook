@@ -9,8 +9,11 @@
 # scenario 取值（决定 content[] 结构）：
 #   text_to_video         文生视频：content=[text]
 #   image_to_video        图生视频-首帧：content=[text, image_url(first_frame)]
+#   reference_to_video    参考生视频：content=[text, image_url(reference_image), ...]
 #   start_end_to_video    首尾帧生视频：content=[text, image_url(first_frame), image_url(last_frame)]
 #   multimodal_reference  多模态参考生视频：content=[text, reference_image, reference_video, reference_audio]
+#   audio_only_reference  纯音频参考：content=[text, reference_audio]
+#   reference_images_profile_max       按 profile 生成 9/30 图 + 1/6 视频 + 1 音频
 #
 # 可用的 checks（含义见 run_tests.py）：
 #   create_status_200               创建任务 HTTP 200
@@ -27,6 +30,9 @@
 #   status_queued_or_running        首次查询 status 为 queued 或 running（进行中态）；
 #                                   判的是创建后第一次查询的响应，故可与 reached_succeeded
 #                                   同时声明，无需为进行中态单独建任务
+#   query_resolution_matches_request 查询响应 resolution 与请求一致
+#   query_duration_matches_request   查询响应 duration 与请求一致
+#   succeeded_video_format_matches_request 生成视频容器与 output_format 一致
 #
 # 可用的 warn_checks（软校验，警告级，不影响 pass/fail，仅提示）：
 #   id_volc_format                  创建与查询响应的 id 均为火山格式（cgt-14位时间戳-随机串，如 cgt-20260420145835-68j7n）
@@ -34,7 +40,7 @@
 #
 # 单个 case 可用字段覆盖全局：model / prompt / resolution / ratio / duration /
 # first_frame_url / last_frame_url / reference_*_url，以及可选开关
-# seed / camera_fixed / watermark / generate_audio / return_last_frame；
+# seed / camera_fixed / watermark / generate_audio / return_last_frame / output_format；
 # 负向用例可声明 expected_error_code 供 error_code_matches 校验。
 # warn_checks: [...]  软校验，不满足只记警告、不判 fail（用于「火山原生格式」这类兼容性提示）。
 # poll: once  仅创建后查询一次，不轮询到终态（与全局 --no-poll 等效，但只作用于该 case）。
@@ -55,7 +61,7 @@ reference_audio_url: "https://ark-project.tos-cn-beijing.volces.com/doc_audio/r2
 
 # 默认生成参数（拼到创建请求体顶层；留空则不发送，由服务取默认值）
 resolution: "720p"
-ratio: "16:9"
+ratio: adaptive
 duration: 5
 
 # 轮询配置
@@ -64,29 +70,14 @@ poll_timeout: 1200    # 单个任务轮询总超时（秒）；首尾帧/多模�
 
 cases:
   # ---------- 文生视频 ----------
-  # 4k 分辨率仅 Seedance 2.0（本套件默认模型 doubao-seedance-2-0-260128）支持，输出 3840×2160、
-  # 10bit 位深；480p/720p/1080p 为通用档位。本用例请求 resolution:4k 并轮询到 succeeded，
-  # 校验成功态结构（必有 content.video_url 与 usage），用于验证被测服务接受并能完成 4k 视频生成任务；
-  # 不支持 4k 的实现会在创建时报错或轮询不到 succeeded。
-  - id: t2v_basic
-    name: 文生视频 4k 分辨率（轮询到成功出片）
-    scenario: text_to_video
-    resolution: "4k"
-    checks:
-      - create_status_200
-      - create_schema
-      - query_status_200
-      - query_schema
-      - reached_succeeded
-      - succeeded_schema
-      - usage_total_equals_completion
-
-  # 文生视频主用例：一次视频生成承载全部可复用的文生校验，避免重复出片。
+  # 文生视频主用例：每个 profile 只生成一次视频，并把能力参数与检查合并到该请求。
+  #   2.5          30 秒 + MOV + 返回尾帧
+  #   2.0 标准版  4k + 返回尾帧
+  #   Fast / Mini  720p、5 秒 + 返回尾帧
   #   status_queued_or_running  判首次轮询响应（创建后第一次查询天然是进行中态）
-  #   return_last_frame:true    尾帧透传只是请求参数，挂在本用例上不额外生成视频
   #   warn_checks               复用已生成的视频做火山原生格式软校验
   - id: t2v_full
-    name: 文生视频 全流程（进行中态 + 轮询到成功 + 计费字段 + 尾帧透传 + 火山原生格式）
+    name: 文生视频 Profile 全流程（能力参数 + 进行中态 + 成功态 + 计费 + 尾帧）
     scenario: text_to_video
     return_last_frame: true
     checks:
@@ -99,6 +90,35 @@ cases:
       - succeeded_schema
       - usage_total_equals_completion
       - succeeded_has_last_frame
+    profile_overrides:
+      seedance-2.5:
+        duration: 30
+        output_format: mov
+        checks:
+          - create_status_200
+          - create_schema
+          - query_status_200
+          - query_schema
+          - status_queued_or_running
+          - reached_succeeded
+          - succeeded_schema
+          - usage_total_equals_completion
+          - succeeded_has_last_frame
+          - query_duration_matches_request
+          - succeeded_video_format_matches_request
+      seedance-2.0:
+        resolution: "4k"
+        checks:
+          - create_status_200
+          - create_schema
+          - query_status_200
+          - query_schema
+          - status_queued_or_running
+          - reached_succeeded
+          - succeeded_schema
+          - usage_total_equals_completion
+          - succeeded_has_last_frame
+          - query_resolution_matches_request
     # 软校验（警告级，不影响 pass/fail）：复用本用例已生成的视频，额外提示任务 id
     # 与视频链接是否为火山原生格式；不新增视频生成，零额外耗时。
     warn_checks:
@@ -107,7 +127,7 @@ cases:
 
   # ---------- 图生视频-首帧 ----------
   - id: i2v_first_frame
-    name: 图生视频-首帧 全流程（轮询到成功）
+    name: 图生视频-首帧 全流程（2.5 同时验证 duration=-1）
     scenario: image_to_video
     checks:
       - create_status_200
@@ -131,12 +151,38 @@ cases:
       - succeeded_schema
       - usage_total_equals_completion
 
-  # ---------- 多模态参考生视频 ----------
-  - id: multimodal_ref
-    name: 多模态参考生视频 全流程（参考图+视频+音频，轮询到成功）
-    scenario: multimodal_reference
-    # 多模态参考有声视频建议开启音频生成
+  # ---------- Seedance 2.5 能力：纯音频参考 ----------
+  - id: audio_only_reference
+    name: 纯音频参考生视频（文本 + 官方音频 URL）
+    scenario: audio_only_reference
+    requires:
+      audio_only_reference: true
+    reference_audio_url: "https://ark-project.tos-cn-beijing.volces.com/doc_audio/r2v_tea_audio1.mp3"
+    checks:
+      - create_status_200
+      - create_schema
+      - query_status_200
+      - query_schema
+      - reached_succeeded
+      - succeeded_schema
+      - usage_total_equals_completion
+
+  # ---------- Profile 图片参考上限 + 多模态：图片 9/30 + 视频 1/6 + 音频 1 ----------
+  - id: reference_images_profile_max
+    name: 按 profile 图片上限提交多模态参考（2.5 同时覆盖官方 6 视频）
+    scenario: reference_images_profile_max
+    prompt: "参考全部图片的产品外观、视频的镜头运动和音频节奏，生成连贯的视频"
+    reference_image_url: "https://arkdocs.tos-cn-beijing.volces.com/images/video-generation/seedance2.5_reference1.png"
     generate_audio: true
+    profile_overrides:
+      seedance-2.5:
+        reference_video_urls:
+          - "https://arkdocs.tos-cn-beijing.volces.com/videos/video-generation/seedance2.5_reference2.mp4"
+          - "https://arkdocs.tos-cn-beijing.volces.com/videos/video-generation/seedance2.5_reference3.mp4"
+          - "https://arkdocs.tos-cn-beijing.volces.com/videos/video-generation/seedance2.5_reference4.mp4"
+          - "https://arkdocs.tos-cn-beijing.volces.com/videos/video-generation/seedance2.5_reference5.mp4"
+          - "https://arkdocs.tos-cn-beijing.volces.com/videos/video-generation/seedance2.5_reference6.mp4"
+          - "https://arkdocs.tos-cn-beijing.volces.com/videos/video-generation/seedance2.5_reference7.mp4"
     checks:
       - create_status_200
       - create_schema
