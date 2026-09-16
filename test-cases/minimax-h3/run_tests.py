@@ -83,7 +83,7 @@ def load_schemas() -> dict:
                 "properties": {
                     "task": {
                         "type": "object",
-                        "required": ["content", "resolution", "duration", "usage", "ratio"],
+                        "required": ["status", "content", "resolution", "duration", "usage", "ratio"],
                         "properties": {
                             "status": {"const": "succeeded"},
                             "content": {

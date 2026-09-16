@@ -147,6 +147,20 @@ class CheckTests(unittest.TestCase):
         )
         self.assertEqual(verdict[0], "pass")
 
+    def test_query_schema_accepts_documented_optional_task_fields(self):
+        """VideoTask 的基础 Schema 不能把文档未标注 required 的字段设为必填。"""
+        for field in ("id", "model", "created_at", "updated_at", "task_type"):
+            with self.subTest(field=field):
+                response = {"task": dict(self.response["task"])}
+                del response["task"][field]
+                verdict = runner.run_checks(
+                    ["query_schema"], self.schemas,
+                    create_status=200, create_response={"task_id": "123"},
+                    query_status=200, query_response=response,
+                    polled_to_terminal=True, create_body=self.create_body, task_id="123",
+                )
+                self.assertEqual(verdict[0], "pass")
+
     def test_query_schema_only_validates_final_response(self):
         """中间态只用于轮询，不参与字段契约校验。"""
         verdict = runner.run_checks(

@@ -9,14 +9,6 @@
   "properties": {
     "task": {
       "type": "object",
-      "required": [
-        "id",
-        "model",
-        "status",
-        "created_at",
-        "updated_at",
-        "task_type"
-      ],
       "properties": {
         "id": {
           "type": "string",
