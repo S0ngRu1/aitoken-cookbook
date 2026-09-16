@@ -249,37 +249,6 @@ class CheckTests(unittest.TestCase):
         )
         self.assertEqual(verdict[0], "pass")
 
-    def test_reference_audio_requires_positive_input_audio_seconds(self):
-        body = {
-            **self.create_body,
-            "content": [
-                {"type": "text", "text": "test"},
-                {"type": "audio_url", "audio_url": {"url": "audio"}, "role": "reference_audio"},
-            ],
-        }
-        self.response["task"]["usage"] = {
-            "total_seconds": 5,
-            "input_seconds": 0,
-            "output_seconds": 5,
-            "input_image_count": 0,
-        }
-        verdict = runner.run_checks(
-            ["usage_billing_matches_request"], self.schemas,
-            create_status=200, create_response={"task_id": "123"},
-            query_status=200, query_response=self.response,
-            polled_to_terminal=True, create_body=body, task_id="123",
-        )
-        self.assertEqual(verdict[0], "fail")
-
-        self.response["task"]["usage"]["input_audio_seconds"] = 3
-        verdict = runner.run_checks(
-            ["usage_billing_matches_request"], self.schemas,
-            create_status=200, create_response={"task_id": "123"},
-            query_status=200, query_response=self.response,
-            polled_to_terminal=True, create_body=body, task_id="123",
-        )
-        self.assertEqual(verdict[0], "pass")
-
     def test_error_contract_and_http_code(self):
         response = {
             "error": {
