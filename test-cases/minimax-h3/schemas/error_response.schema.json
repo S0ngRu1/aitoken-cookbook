@@ -18,17 +18,8 @@
           "minLength": 1
         },
         "http_code": {
-          "oneOf": [
-            {
-              "type": "string",
-              "pattern": "^[1-5][0-9]{2}$"
-            },
-            {
-              "type": "integer",
-              "minimum": 100,
-              "maximum": 599
-            }
-          ]
+          "type": "string",
+          "pattern": "^[1-5][0-9]{2}$"
         }
       }
     },

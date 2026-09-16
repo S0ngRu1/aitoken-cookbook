@@ -239,7 +239,7 @@ class CheckTests(unittest.TestCase):
         response = {
             "error": {
                 "message": "invalid params (2013)",
-                "http_code": 400,
+                "http_code": "400",
             }
         }
         verdict = runner.run_checks(

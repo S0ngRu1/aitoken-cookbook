@@ -28,7 +28,7 @@
 - 合并校验核心计费字段：`total_seconds = input_seconds + output_seconds`。
 - `output_seconds` 等于生成时长，`input_image_count` 等于请求图片数。
 - 无参考视频时 `input_seconds=0`；有参考视频时 `input_seconds>0`。
-- 错误响应至少包含 `error.message`；不强制要求顶层 `type`、`error.type`，`error.http_code` 允许字符串或数字，并在存在时与 HTTP 状态一致。
+- 错误响应至少包含 `error.message`；不强制要求顶层 `type`、`error.type`，`error.http_code` 若存在必须为三位 HTTP 状态码字符串，并与 HTTP 状态一致。
 
 ## 依赖
 
