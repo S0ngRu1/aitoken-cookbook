@@ -376,6 +376,20 @@ def run_checks(checks: list[str], schemas: dict, *, create_status: int, create_r
             if not has_reference_video and input_seconds != 0:
                 expected = ">0" if has_reference_video else 0
                 return "fail", f"usage.input_seconds 与参考视频输入不符：期望 {expected}，实际 {input_seconds}", expected, input_seconds
+            has_reference_audio = any(
+                isinstance(item, dict) and item.get("type") == "audio_url"
+                for item in create_body.get("content", [])
+            )
+            if has_reference_audio:
+                input_audio_seconds = usage.get("input_audio_seconds")
+                if not isinstance(input_audio_seconds, int) or input_audio_seconds <= 0:
+                    return (
+                        "fail",
+                        "有参考音频时 usage.input_audio_seconds 应存在且大于 0，"
+                        f"实际 {input_audio_seconds}",
+                        ">0",
+                        input_audio_seconds,
+                    )
         elif check not in {
             "create_status_200", "query_status_200", "create_schema", "create_error_status",
             "error_schema", "error_http_code_matches_status", "query_schema",
